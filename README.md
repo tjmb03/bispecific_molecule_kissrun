@@ -96,6 +96,109 @@ other and produce an optimum — which the `sweep_koff` output shows directly.
 
 ---
 
+---
+
+## The model, in equations
+
+Four layers. Each takes the output of the one before.
+
+### 1 · Binding — how much bridge forms
+
+Rapid equilibrium with target depletion. Avidity enters as a fold tightening of both
+effective dissociation constants once the assembled complex engages a surface with both arms:
+
+```
+a = K_A / avidity          b = K_B / avidity
+```
+
+The two conservation laws are coupled and solved by fixed-point iteration:
+
+```
+A_free  =  A_total / ( 1 + D/a + D·B_free / (a·b) )
+
+B_free  =  B_total / ( 1 + D/b + D·A_free / (a·b) )
+```
+
+and the productive ternary complex follows:
+
+```
+T  =  D · A_free · B_free / (a · b)
+```
+
+**Two results fall out of this, and both are asserted in the test suite.** In the target-excess
+limit the trimer peaks at the geometric mean of the effective affinities:
+
+```
+D*  =  √(K_A · K_B) / avidity
+```
+
+which depends only on the **product** of the two constants — so arms of 0.3 and 30 nM peak
+exactly where arms of 3 and 3 do. And sweeping target density moves the peak **height** but
+never its **position**: two separable levers.
+
+### 2 · Barrier — how much drug arrives
+
+A bispecific with a very tight receptor arm binds the first T cell it meets in the periphery
+and never reaches the tumour core. No avidity applies, because nothing is bridged in transit:
+
+```
+f_penetration  =  1 / ( 1 + R_peripheral / K_B )
+
+D_arriving     =  D_administered · f_penetration
+```
+
+This term is what stops the screen preferring unbounded affinity.
+
+### 3 · Kinetics — how long the contact lasts
+
+Bulk trimer becomes a bridge count at the interface through a gain that absorbs synapse area,
+receptor mobility and the local concentrating effect:
+
+```
+n  =  g · T
+```
+
+A contact ruptures only when **every** bridge is momentarily unbound at the same instant, so
+the rupture rate carries the unbound probability to the power of the remaining bridges:
+
+```
+k_rupture  =  k_off · p_unbound^(n−1)
+
+τ          =  60 / k_rupture          minutes, for k_off in h⁻¹
+```
+
+At n = 1 this reduces to the single-bond lifetime. Each additional bridge multiplies τ by
+1/p — **exponential in bridge count, while bridge count is only linear in target density.**
+
+Inverting it gives the bridges needed to survive a given dwell time:
+
+```
+n*  =  1 + ln( 60 / (τ · k_off) ) / ln( p_unbound )
+```
+
+### 4 · Thresholds — what that duration produces
+
+```
+kills(D)      ⟺   τ(D) ≥ τ_kill
+activates(D)  ⟺   τ(D) ≥ τ_cytokine
+```
+
+The therapeutic window is the largest **contiguous** set of concentrations satisfying all
+three conditions at once:
+
+```
+W  =  { D :  τ_tumour(D) ≥ τ_kill          the tumour cell dies
+          ∧  τ_tumour(D) <  τ_cytokine      without sustained activation
+          ∧  τ_normal(D) <  τ_kill }        and normal tissue is untouched
+
+margin  =  log₁₀( max W / min W )
+```
+
+Contiguity matters: a dosing range interrupted by a region of cytokine risk is not a window,
+and reporting first-to-last would span the gap.
+
+---
+
 ## Install and run
 
 ```bash
@@ -131,8 +234,9 @@ src/kissrun/
   kinetics.py    multivalent contact lifetime; the kill and cytokine thresholds
   screen.py      the four layers combined into a therapeutic window
   validation.py  independent checks on the equilibrium layer
+  identifiability.py  what can and cannot be calibrated
   panel.py       a synthetic candidate panel, built to exercise the levers
-tests/           27 tests, including the analytical results pinned as assertions
+tests/           31 tests, including the analytical results pinned as assertions
 scripts/         runner producing the tables and figures
 ```
 
@@ -197,6 +301,55 @@ now it is defensible and quantified.
 
 ---
 
+## Identifiability — what could be calibrated, and what could not
+
+The kinetic layer *looks* like five parameters: synapse gain, unbound probability, receptor
+off-rate, and the two dwell thresholds. It is not. Every verdict depends on them only through
+**two** derived quantities.
+
+The threshold condition is `g·T ≥ n*`, which rearranges to a threshold on trimer alone:
+
+```
+T_kill      =  n*(τ_kill,     p, k_off) / g
+T_cytokine  =  n*(τ_cytokine, p, k_off) / g
+```
+
+**Five parameters, two identifiable combinations, three degrees of freedom that no screen
+output can recover.** Raise the synapse gain and lengthen the dwell thresholds to compensate,
+and every window is bit-for-bit identical:
+
+```bash
+python -c "from kissrun import report; report()"
+```
+
+| | T_kill (nM) | T_cytokine (nM) |
+|---|---|---|
+| as configured — `g`=40, `p`=0.25, τ = 2 / 20 min | 0.0407879 | 0.0823120 |
+| alternative — `g`=80, `p`=0.50, τ = 4 / 40 min | 0.0407879 | 0.0823120 |
+
+Different parameters. Identical thresholds. Identical windows, asserted to `rel_tol=1e-12`
+across the whole panel.
+
+### What follows from it
+
+**Measuring `p_unbound` or the synapse gain would not change a single verdict.** They enter
+only through the two thresholds, so a better estimate of either buys nothing. That is worth
+knowing before commissioning the experiment.
+
+**Calibrating `T_kill` and `T_cytokine` directly would change every verdict.** Two numbers,
+against a molecule with known clinical behaviour — that is the experiment that matters, and it
+is a smaller ask than it first appeared.
+
+**And it bounds the claim.** The kinetic construction is a mechanistic account of *why* two
+thresholds exist and why they differ — pre-formed granules against transcription. It is not
+evidence that the particular values of `g`, `p` or `τ` used here are right, and nothing the
+screen produces could make it so.
+
+> This is the same discipline the validation section applies to the equilibrium layer: state
+> what the model supports, not what it computes.
+
+---
+
 ## Honest limitations
 
 This is a methods demonstration on illustrative parameters. Three things are worth stating
@@ -204,14 +357,16 @@ plainly rather than discovering later.
 
 **Both dwell thresholds are calibration parameters.** `tau_kill_min` and `tau_cytokine_min` are
 not measured here. Their *ordering* is well founded — granules are pre-formed, transcription is
-not — but their values set where every verdict falls, and the separation between them sets how
-wide any window can be. The screen cannot rank candidates in absolute terms until both are
-calibrated against a molecule with known clinical behaviour.
+not — but their values set where every verdict falls. See *Identifiability* above for what can
+and cannot be calibrated: it is two numbers rather than five, which is a smaller ask than it
+first appears.
 
-**The synapse gain is the least determined input.** `synapse_gain` converts a bulk trimer
-concentration into a bond count at the interface. It absorbs synapse area, receptor mobility and
-local concentrating effects. Because lifetime is exponential in bond count, the screen is
-*more* sensitive to this parameter than to any binding constant.
+**The synapse gain is the least determined input — and is not separately identifiable.**
+`synapse_gain` converts a bulk trimer concentration into a bridge count at the interface,
+absorbing synapse area, receptor mobility and local concentrating effects. Because lifetime is
+exponential in bridge count, the screen is *more* sensitive to it than to any binding constant —
+but it enters only through the two trimer thresholds, so measuring it in isolation would not
+change a verdict.
 
 **Independent-bond rupture is an approximation.** Real multivalent contacts involve force
 sharing, catch-bond behaviour and rebinding within the contact. The `p^(n−1)` form captures

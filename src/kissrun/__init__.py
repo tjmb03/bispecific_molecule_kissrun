@@ -12,6 +12,7 @@ from .binding import trimer, free_targets, peak_concentration, penetration_facto
 from .kinetics import (bonds_per_contact, contact_lifetime, kills, activates,
                        threshold_bonds, DEFAULTS)
 from .screen import Candidate, System, screen, sweep_koff
+from .identifiability import trimer_thresholds, equivalent_parameterisation, report
 from .validation import (mass_balance_residual, free_targets_rootfind,
                          trimer_ode_steady_state, drug_depletion, validate)
 
@@ -20,4 +21,5 @@ __all__ = ["trimer","free_targets","peak_concentration","penetration_factor",
            "bonds_per_contact","contact_lifetime","kills","activates","threshold_bonds",
            "DEFAULTS","Candidate","System","screen","sweep_koff",
            "mass_balance_residual","free_targets_rootfind",
-           "trimer_ode_steady_state","drug_depletion","validate"]
+           "trimer_ode_steady_state","drug_depletion","validate",
+           "trimer_thresholds","equivalent_parameterisation","report"]

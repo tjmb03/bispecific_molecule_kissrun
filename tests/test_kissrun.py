@@ -247,3 +247,42 @@ def test_validate_returns_all_residuals_below_tolerance():
     assert r["mass_balance"] < 1e-12
     assert r["rootfind"] < 1e-10
     assert r["ode_steady_state"] < 1e-8
+
+
+# ---------------------------------------------------------------- identifiability
+
+from kissrun import trimer_thresholds, equivalent_parameterisation, report
+
+
+def test_kinetic_layer_reduces_to_two_trimer_thresholds():
+    """Five kinetic parameters, two identifiable combinations."""
+    t_kill, t_cyt = trimer_thresholds(72.0)
+    assert 0 < t_kill < t_cyt
+
+
+def test_an_equivalent_parameterisation_gives_identical_thresholds():
+    """Constructive demonstration of the degeneracy, not an assertion about it."""
+    alt = equivalent_parameterisation(72.0, synapse_gain_new=80.0, p_unbound_new=0.5)
+    a = trimer_thresholds(72.0)
+    b = trimer_thresholds(72.0, alt["tau_kill_min"], alt["tau_cytokine_min"],
+                          alt["p_unbound"], alt["synapse_gain"])
+    assert math.isclose(a[0], b[0], rel_tol=1e-12)
+    assert math.isclose(a[1], b[1], rel_tol=1e-12)
+
+
+def test_degenerate_parameters_produce_bit_identical_windows():
+    """The degeneracy is not approximate: every verdict and edge matches."""
+    alt = equivalent_parameterisation(72.0, synapse_gain_new=80.0, p_unbound_new=0.5)
+    for c in PANEL:
+        a = screen(c)
+        b = screen(c, **alt)
+        assert a["verdict"] == b["verdict"]
+        if a["verdict"] == "GO":
+            assert math.isclose(a["window_lo"], b["window_lo"], rel_tol=1e-12)
+            assert math.isclose(a["window_hi"], b["window_hi"], rel_tol=1e-12)
+            assert math.isclose(a["margin"], b["margin"], rel_tol=1e-12)
+
+
+def test_report_returns_a_vanishing_difference():
+    r = report(verbose=False)
+    assert r["max_relative_difference"] < 1e-12
